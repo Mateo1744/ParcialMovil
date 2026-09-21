@@ -64,8 +64,18 @@ export async function initializeDatabase(db: SQLiteDatabase) {
       FOREIGN KEY (id_login) REFERENCES Login(id) ON DELETE CASCADE
     );
 
-    PRAGMA user_version = 1;
   `);
+
+  const databaseVersion = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+
+  if (!databaseVersion || databaseVersion.user_version < 2) {
+    await db.withTransactionAsync(async () => {
+      // En la versión 1, Detalles.valor guardaba el precio unitario.
+      // Desde la versión 2 guarda el subtotal: cantidad x precio unitario.
+      await db.runAsync('UPDATE Detalles SET valor = valor * cantidad');
+      await db.execAsync('PRAGMA user_version = 2');
+    });
+  }
 
   const admin = await db.getFirstAsync<{ id: number }>(
     'SELECT id FROM Login WHERE correo = ?',
@@ -85,4 +95,3 @@ export async function initializeDatabase(db: SQLiteDatabase) {
     );
   }
 }
-

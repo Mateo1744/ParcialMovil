@@ -204,7 +204,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>Primera etapa completada</Text>
+        <Text style={styles.sectionTitle}>Funciones implementadas</Text>
 
         <View style={styles.cardGrid}>
           <View style={styles.moduleCard}>
@@ -229,7 +229,7 @@ export default function HomeScreen() {
         </View>
 
         <Text style={styles.nextStep}>
-          En la siguiente etapa agregaremos el menú y las funciones correspondientes a cada rol.
+          Usa las opciones superiores para entrar a los módulos disponibles según tu rol.
         </Text>
       </ScrollView>
     </SafeAreaView>

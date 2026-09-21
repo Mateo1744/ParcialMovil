@@ -28,6 +28,7 @@ type AuthContextValue = {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<AuthResult>;
   register: (email: string, password: string) => Promise<AuthResult>;
+  updateCurrentUserEmail: (email: string) => void;
   signOut: () => Promise<void>;
 };
 
@@ -134,8 +135,15 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setUser(null);
   }
 
+  function updateCurrentUserEmail(email: string) {
+    setUser((currentUser) =>
+      currentUser ? { ...currentUser, correo: normalizeEmail(email) } : currentUser
+    );
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, register, signOut }}>
+    <AuthContext.Provider
+      value={{ user, loading, signIn, register, updateCurrentUserEmail, signOut }}>
       {children}
     </AuthContext.Provider>
   );
@@ -150,4 +158,3 @@ export function useAuth() {
 
   return context;
 }
-

@@ -24,6 +24,8 @@ type Message = {
   text: string;
 };
 
+type UserRole = 'admin' | 'cliente';
+
 function formatDate(value: string) {
   const date = new Date(`${value.replace(' ', 'T')}Z`);
 
@@ -43,6 +45,7 @@ export default function PendingRequestsScreen() {
   const [requests, setRequests] = useState<PendingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [selectedRoles, setSelectedRoles] = useState<Record<number, UserRole>>({});
   const [message, setMessage] = useState<Message | null>(null);
 
   const loadRequests = useCallback(async () => {
@@ -55,6 +58,13 @@ export default function PendingRequestsScreen() {
         ORDER BY fecha_creacion ASC, id ASC
       `);
       setRequests(rows);
+      setSelectedRoles((current) => {
+        const next = { ...current };
+        rows.forEach((request) => {
+          next[request.id] = next[request.id] ?? 'cliente';
+        });
+        return next;
+      });
     } catch {
       setMessage({ type: 'error', text: 'No fue posible cargar las solicitudes.' });
     } finally {
@@ -81,11 +91,14 @@ export default function PendingRequestsScreen() {
       setProcessingId(request.id);
       setMessage(null);
 
+      const selectedRole = selectedRoles[request.id] ?? 'cliente';
+      const roleToSave = status === 'activo' ? selectedRole : 'cliente';
       const result = await db.runAsync(
         `UPDATE Login
-         SET estado = ?
+         SET estado = ?, rol = ?
          WHERE id = ? AND rol = 'cliente' AND estado = 'pendiente'`,
         status,
+        roleToSave,
         request.id
       );
 
@@ -99,7 +112,7 @@ export default function PendingRequestsScreen() {
           type: 'success',
           text:
             status === 'activo'
-              ? `La cuenta ${request.correo} fue aprobada.`
+              ? `La cuenta ${request.correo} fue aprobada con rol ${selectedRole}.`
               : `La solicitud de ${request.correo} fue rechazada.`,
         });
       }
@@ -163,6 +176,32 @@ export default function PendingRequestsScreen() {
                     <Text style={styles.pendingLabel}>PENDIENTE</Text>
                     <Text style={styles.email}>{request.correo}</Text>
                     <Text style={styles.date}>Enviada: {formatDate(request.fecha_creacion)}</Text>
+                  </View>
+
+                  <View style={styles.roleSection}>
+                    <Text style={styles.roleTitle}>Rol que tendrá la cuenta</Text>
+                    <View style={styles.roleOptions}>
+                      {(['cliente', 'admin'] as UserRole[]).map((role) => {
+                        const isSelected = (selectedRoles[request.id] ?? 'cliente') === role;
+                        return (
+                          <Pressable
+                            key={role}
+                            style={[styles.roleOption, isSelected && styles.roleOptionSelected]}
+                            onPress={() =>
+                              setSelectedRoles((current) => ({ ...current, [request.id]: role }))
+                            }
+                            disabled={processingId !== null}>
+                            <Text
+                              style={[
+                                styles.roleOptionText,
+                                isSelected && styles.roleOptionTextSelected,
+                              ]}>
+                              {role === 'cliente' ? 'Cliente' : 'Administrador'}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
 
                   <View style={styles.actions}>
@@ -257,6 +296,22 @@ const styles = StyleSheet.create({
   pendingLabel: { color: '#9A6700', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   email: { color: '#14324A', fontSize: 18, fontWeight: '800' },
   date: { color: '#6C7F8F', fontSize: 14 },
+  roleSection: { borderTopWidth: 1, borderTopColor: '#E2E9EE', paddingTop: 14 },
+  roleTitle: { color: '#14324A', fontSize: 14, fontWeight: '800', marginBottom: 9 },
+  roleOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 9 },
+  roleOption: {
+    minHeight: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#AAC1CE',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    backgroundColor: '#FFFFFF',
+  },
+  roleOptionSelected: { borderColor: '#176B87', backgroundColor: '#E8F3F6' },
+  roleOptionText: { color: '#5F7181', fontSize: 14, fontWeight: '800' },
+  roleOptionTextSelected: { color: '#176B87' },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
   rejectButton: {
     minHeight: 44,

@@ -46,13 +46,14 @@ function formatDate(value: string) {
 
 export default function ClientsScreen() {
   const db = useSQLiteContext();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, updateCurrentUserEmail } = useAuth();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editLastName, setEditLastName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
 
@@ -119,6 +120,7 @@ export default function ClientsScreen() {
     setEditingId(client.id);
     setEditName(client.nombre);
     setEditLastName(client.apellido);
+    setEditEmail(client.correo);
     setDeleteId(null);
     setMessage(null);
   }
@@ -127,13 +129,15 @@ export default function ClientsScreen() {
     setEditingId(null);
     setEditName('');
     setEditLastName('');
+    setEditEmail('');
   }
 
   async function saveClient(client: Client) {
     const cleanName = editName.trim();
     const cleanLastName = editLastName.trim();
+    const cleanEmail = editEmail.trim().toLowerCase();
 
-    if (!isAdmin) {
+    if (!user || (!isAdmin && client.id_login !== user.id)) {
       return;
     }
 
@@ -142,16 +146,40 @@ export default function ClientsScreen() {
       return;
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setMessage({ type: 'error', text: 'Escribe un correo electrónico válido.' });
+      return;
+    }
+
     try {
       setProcessingId(client.id);
       setMessage(null);
 
-      await db.runAsync(
-        'UPDATE Cliente SET nombre = ?, apellido = ? WHERE id = ?',
-        cleanName,
-        cleanLastName,
-        client.id
+      const emailInUse = await db.getFirstAsync<{ id: number }>(
+        'SELECT id FROM Login WHERE correo = ? AND id <> ?',
+        cleanEmail,
+        client.id_login
       );
+
+      if (emailInUse) {
+        setMessage({ type: 'error', text: 'Ya existe otra cuenta registrada con ese correo.' });
+        return;
+      }
+
+      await db.withTransactionAsync(async () => {
+        await db.runAsync(
+          'UPDATE Cliente SET nombre = ?, apellido = ?, correo = ? WHERE id = ?',
+          cleanName,
+          cleanLastName,
+          cleanEmail,
+          client.id
+        );
+        await db.runAsync('UPDATE Login SET correo = ? WHERE id = ?', cleanEmail, client.id_login);
+      });
+
+      if (client.id_login === user.id) {
+        updateCurrentUserEmail(cleanEmail);
+      }
 
       cancelEditing();
       setMessage({ type: 'success', text: 'Los datos del cliente fueron actualizados.' });
@@ -267,7 +295,7 @@ export default function ClientsScreen() {
           <Text style={styles.introText}>
             {isAdmin
               ? 'Consulta, edita, inactiva o elimina clientes sin perder el historial de compras.'
-              : 'Consulta los datos asociados a tu cuenta de cliente.'}
+              : 'Consulta y actualiza los datos asociados a tu cuenta de cliente.'}
           </Text>
         </View>
 
@@ -348,6 +376,16 @@ export default function ClientsScreen() {
                         autoCapitalize="words"
                         editable={!isProcessing}
                       />
+                      <Text style={styles.label}>Correo electrónico</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={editEmail}
+                        onChangeText={setEditEmail}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="email-address"
+                        editable={!isProcessing}
+                      />
                       <View style={styles.actions}>
                         <Pressable style={styles.secondaryButton} onPress={cancelEditing}>
                           <Text style={styles.secondaryButtonText}>Cancelar</Text>
@@ -390,19 +428,23 @@ export default function ClientsScreen() {
                     </View>
                   ) : null}
 
-                  {isAdmin && !isEditing && !isDeleting ? (
+                  {!isEditing && !isDeleting ? (
                     <View style={styles.actionsWrap}>
                       <Pressable style={styles.secondaryButton} onPress={() => startEditing(client)}>
                         <Text style={styles.secondaryButtonText}>Editar</Text>
                       </Pressable>
-                      <Pressable style={styles.statusButton} onPress={() => changeStatus(client)}>
-                        <Text style={styles.statusButtonText}>
-                          {client.estado === 'activo' ? 'Inactivar' : 'Activar'}
-                        </Text>
-                      </Pressable>
-                      <Pressable style={styles.deleteButton} onPress={() => requestDelete(client)}>
-                        <Text style={styles.deleteButtonText}>Eliminar</Text>
-                      </Pressable>
+                      {isAdmin ? (
+                        <>
+                          <Pressable style={styles.statusButton} onPress={() => changeStatus(client)}>
+                            <Text style={styles.statusButtonText}>
+                              {client.estado === 'activo' ? 'Inactivar' : 'Activar'}
+                            </Text>
+                          </Pressable>
+                          <Pressable style={styles.deleteButton} onPress={() => requestDelete(client)}>
+                            <Text style={styles.deleteButtonText}>Eliminar</Text>
+                          </Pressable>
+                        </>
+                      ) : null}
                     </View>
                   ) : null}
                 </View>

@@ -17,6 +17,7 @@ type DetailRow = {
   id_encabezado: number;
   id_producto: number;
   cantidad: number;
+  valor: number;
   stock: number;
 };
 
@@ -24,7 +25,7 @@ async function recalculateTotal(db: SQLiteDatabase, purchaseId: number) {
   await db.runAsync(
     `UPDATE Encabezado
      SET total = COALESCE((
-       SELECT SUM(cantidad * valor)
+       SELECT SUM(valor)
        FROM Detalles
        WHERE id_encabezado = ?
      ), 0)
@@ -96,7 +97,7 @@ export async function createPurchase(
         purchaseId,
         product.id,
         product.quantity,
-        product.valor_unitario
+        product.valor_unitario * product.quantity
       );
     }
   });
@@ -134,7 +135,7 @@ export async function updateDetailQuantity(
 
   await db.withTransactionAsync(async () => {
     const detail = await db.getFirstAsync<DetailRow>(
-      `SELECT d.id, d.id_encabezado, d.id_producto, d.cantidad, p.stock
+      `SELECT d.id, d.id_encabezado, d.id_producto, d.cantidad, d.valor, p.stock
        FROM Detalles d
        INNER JOIN Producto p ON p.id = d.id_producto
        WHERE d.id = ?`,
@@ -146,6 +147,7 @@ export async function updateDetailQuantity(
     }
 
     const difference = newQuantity - detail.cantidad;
+    const unitPrice = detail.valor / detail.cantidad;
 
     if (difference > 0) {
       const stockUpdate = await db.runAsync(
@@ -166,7 +168,12 @@ export async function updateDetailQuantity(
       );
     }
 
-    await db.runAsync('UPDATE Detalles SET cantidad = ? WHERE id = ?', newQuantity, detailId);
+    await db.runAsync(
+      'UPDATE Detalles SET cantidad = ?, valor = ? WHERE id = ?',
+      newQuantity,
+      unitPrice * newQuantity,
+      detailId
+    );
     await recalculateTotal(db, detail.id_encabezado);
   });
 }
@@ -222,7 +229,7 @@ export async function addPurchaseDetail(
       purchaseId,
       product.id,
       quantity,
-      product.valor_unitario
+      product.valor_unitario * quantity
     );
     await recalculateTotal(db, purchaseId);
   });
@@ -231,7 +238,7 @@ export async function addPurchaseDetail(
 export async function deletePurchaseDetail(db: SQLiteDatabase, detailId: number) {
   await db.withTransactionAsync(async () => {
     const detail = await db.getFirstAsync<DetailRow>(
-      `SELECT d.id, d.id_encabezado, d.id_producto, d.cantidad, p.stock
+      `SELECT d.id, d.id_encabezado, d.id_producto, d.cantidad, d.valor, p.stock
        FROM Detalles d
        INNER JOIN Producto p ON p.id = d.id_producto
        WHERE d.id = ?`,

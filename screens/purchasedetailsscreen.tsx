@@ -372,12 +372,12 @@ export default function PurchaseDetailsScreen() {
                       <View style={styles.detailInfo}>
                         <Text style={styles.productName}>{detail.nombre}</Text>
                         <Text style={styles.unitPrice}>
-                          Precio unitario: {formatMoney(detail.valor)}
+                          Precio unitario: {formatMoney(detail.valor / detail.cantidad)}
                         </Text>
                       </View>
                       <View style={styles.lineTotalBox}>
                         <Text style={styles.lineTotal}>
-                          {formatMoney(detail.cantidad * detail.valor)}
+                          {formatMoney(detail.valor)}
                         </Text>
                         <Text style={styles.quantity}>{detail.cantidad} unidades</Text>
                       </View>
