@@ -1,5 +1,14 @@
+/**
+ * RESUMEN DEL ARCHIVO
+ * Permite al cliente seleccionar productos y cantidades, calcula el total en
+ * tiempo real y registra toda la compra mediante una transacción SQLite.
+ */
+
+// Hooks para cargar datos, guardar cantidades y calcular valores derivados.
 import { useEffect, useMemo, useState } from 'react';
+// Navegación hacia login, perfil, encabezados o detalles.
 import { router } from 'expo-router';
+// Acceso a la base de datos compartida.
 import { useSQLiteContext } from 'expo-sqlite';
 import {
   ActivityIndicator,
@@ -12,9 +21,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Sesión actual y función transaccional de compras.
 import { useAuth } from '@/context/auth-context';
 import { createPurchase } from '@/database/purchases';
 
+// Datos mostrados para cada producto disponible.
 type Product = {
   id: number;
   nombre: string;
@@ -23,6 +34,7 @@ type Product = {
   stock: number;
 };
 
+// Convierte números a moneda colombiana para la interfaz.
 function formatMoney(value: number) {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -32,6 +44,7 @@ function formatMoney(value: number) {
 }
 
 export default function NewPurchaseScreen() {
+  // Dependencias y estados de la pantalla.
   const db = useSQLiteContext();
   const { user, loading: authLoading } = useAuth();
   const [clientId, setClientId] = useState<number | null>(null);
@@ -41,9 +54,11 @@ export default function NewPurchaseScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Carga el perfil del cliente y productos que todavía tengan stock.
   useEffect(() => {
     let isActive = true;
 
+    // Valida sesión, rol y perfil antes de permitir comprar.
     async function loadData() {
       if (authLoading) {
         return;
@@ -54,12 +69,14 @@ export default function NewPurchaseScreen() {
         return;
       }
 
+      // El administrador puede consultar compras, pero no crearlas como cliente.
       if (user.rol !== 'cliente') {
         router.replace('/encabezados');
         return;
       }
 
       try {
+        // Obtiene el id de Cliente que necesita el encabezado.
         const client = await db.getFirstAsync<{ id: number }>(
           'SELECT id FROM Cliente WHERE id_login = ?',
           user.id
@@ -70,6 +87,7 @@ export default function NewPurchaseScreen() {
           return;
         }
 
+        // Solo muestra productos que se pueden comprar actualmente.
         const rows = await db.getAllAsync<Product>(`
           SELECT id, nombre, descripcion, valor_unitario, stock
           FROM Producto
@@ -98,6 +116,7 @@ export default function NewPurchaseScreen() {
     };
   }, [authLoading, db, user]);
 
+  // Convierte cantidades escritas en una lista de productos seleccionados.
   const selectedItems = useMemo(
     () =>
       products
@@ -109,6 +128,7 @@ export default function NewPurchaseScreen() {
     [products, quantities]
   );
 
+  // Recalcula el total únicamente cuando cambian los productos seleccionados.
   const total = useMemo(
     () =>
       selectedItems.reduce(
@@ -118,6 +138,7 @@ export default function NewPurchaseScreen() {
     [selectedItems]
   );
 
+  // Valida el formulario y crea la compra completa.
   async function handlePurchase() {
     setError('');
 
@@ -131,6 +152,7 @@ export default function NewPurchaseScreen() {
       return;
     }
 
+    // Busca alguna cantidad que supere las existencias mostradas.
     const invalidQuantity = selectedItems.find(
       (item) => item.quantity > item.product.stock
     );
@@ -143,6 +165,7 @@ export default function NewPurchaseScreen() {
 
     try {
       setSaving(true);
+      // La función central vuelve a validar stock dentro de una transacción.
       const purchaseId = await createPurchase(
         db,
         clientId,
@@ -152,6 +175,7 @@ export default function NewPurchaseScreen() {
         }))
       );
 
+      // Abre el detalle de la compra recién creada.
       router.replace({ pathname: '/detalles', params: { id: String(purchaseId) } });
     } catch (purchaseError) {
       setError(
@@ -164,6 +188,7 @@ export default function NewPurchaseScreen() {
     }
   }
 
+  // Oculta el formulario hasta completar todas las verificaciones.
   if (authLoading || loading || !user || user.rol !== 'cliente') {
     return (
       <View style={styles.loadingContainer}>
@@ -172,6 +197,7 @@ export default function NewPurchaseScreen() {
     );
   }
 
+  // Interfaz de selección, resumen y confirmación.
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -247,6 +273,7 @@ export default function NewPurchaseScreen() {
   );
 }
 
+// Estilos de la pantalla Nueva compra.
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7FA' },
   container: { flexGrow: 1, width: '100%', maxWidth: 820, alignSelf: 'center', padding: 24 },
@@ -259,7 +286,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: '#14324A', fontSize: 19, fontWeight: '800', textAlign: 'center' },
   emptyText: { color: '#5F7181', fontSize: 15, lineHeight: 21, marginTop: 7, textAlign: 'center' },
   list: { gap: 12 },
-  productCard: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E9EE', borderRadius: 16, padding: 18 },
+  productCard: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E9EE', borderRadius: 16, padding: 18 },
   productInfo: { flex: 1 },
   productName: { color: '#14324A', fontSize: 18, fontWeight: '900' },
   description: { color: '#5F7181', fontSize: 14, lineHeight: 20, marginTop: 4 },

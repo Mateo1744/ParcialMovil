@@ -1,5 +1,14 @@
+/**
+ * RESUMEN DEL ARCHIVO
+ * Gestiona el módulo Cliente. El administrador puede consultar, editar,
+ * activar, inactivar y eliminar; el cliente únicamente consulta y edita su perfil.
+ */
+
+// Hooks de React para estado, efectos y funciones reutilizables.
 import { useCallback, useEffect, useState } from 'react';
+// Herramientas de navegación y recarga al regresar a la pantalla.
 import { router, useFocusEffect } from 'expo-router';
+// Conexión SQLite compartida por la aplicación.
 import { useSQLiteContext } from 'expo-sqlite';
 import {
   ActivityIndicator,
@@ -12,8 +21,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Entrega el usuario actual y permite sincronizar su correo.
 import { useAuth } from '@/context/auth-context';
 
+// Columnas mostradas por cada tarjeta de cliente.
 type Client = {
   id: number;
   id_login: number;
@@ -25,11 +36,13 @@ type Client = {
   compras: number;
 };
 
+// Estructura común para mensajes verdes o rojos.
 type Message = {
   type: 'success' | 'error';
   text: string;
 };
 
+// Convierte la fecha de SQLite a un texto entendible en español.
 function formatDate(value: string) {
   const date = new Date(`${value.replace(' ', 'T')}Z`);
 
@@ -45,8 +58,10 @@ function formatDate(value: string) {
 }
 
 export default function ClientsScreen() {
+  // Servicios compartidos de base de datos y autenticación.
   const db = useSQLiteContext();
   const { user, loading: authLoading, updateCurrentUserEmail } = useAuth();
+  // Estados de datos, carga, edición, eliminación y mensajes.
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
@@ -57,8 +72,10 @@ export default function ClientsScreen() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
 
+  // Define qué consulta y qué botones debe ver la persona conectada.
   const isAdmin = user?.rol === 'admin';
 
+  // Carga todos los clientes para admin o únicamente el perfil propio para cliente.
   const loadClients = useCallback(async () => {
     if (!user) {
       return;
@@ -67,6 +84,7 @@ export default function ClientsScreen() {
     try {
       setLoading(true);
 
+      // La consulta une Login para conocer el estado y cuenta las compras.
       const sql = `
         SELECT
           c.id,
@@ -85,10 +103,12 @@ export default function ClientsScreen() {
         ORDER BY c.nombre COLLATE NOCASE, c.apellido COLLATE NOCASE
       `;
 
+      // El parámetro user.id solo se usa cuando la sesión pertenece a un cliente.
       const rows = isAdmin
         ? await db.getAllAsync<Client>(sql)
         : await db.getAllAsync<Client>(sql, user.id);
 
+      // Un cliente sin perfil debe completar primero sus datos.
       if (!isAdmin && rows.length === 0) {
         router.replace('/perfil');
         return;
@@ -102,12 +122,14 @@ export default function ClientsScreen() {
     }
   }, [db, isAdmin, user]);
 
+  // Protege la ruta cuando no existe una sesión.
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace('/login');
     }
   }, [authLoading, user]);
 
+  // Recarga la lista al abrir o regresar a esta pantalla.
   useFocusEffect(
     useCallback(() => {
       if (user) {
@@ -116,6 +138,7 @@ export default function ClientsScreen() {
     }, [loadClients, user])
   );
 
+  // Copia los datos seleccionados a los campos de edición.
   function startEditing(client: Client) {
     setEditingId(client.id);
     setEditName(client.nombre);
@@ -125,6 +148,7 @@ export default function ClientsScreen() {
     setMessage(null);
   }
 
+  // Cierra y limpia el formulario de edición.
   function cancelEditing() {
     setEditingId(null);
     setEditName('');
@@ -132,11 +156,13 @@ export default function ClientsScreen() {
     setEditEmail('');
   }
 
+  // Valida y actualiza Cliente y Login dentro de una transacción.
   async function saveClient(client: Client) {
     const cleanName = editName.trim();
     const cleanLastName = editLastName.trim();
     const cleanEmail = editEmail.trim().toLowerCase();
 
+    // Impide que un cliente intente modificar otra cuenta.
     if (!user || (!isAdmin && client.id_login !== user.id)) {
       return;
     }
@@ -155,6 +181,7 @@ export default function ClientsScreen() {
       setProcessingId(client.id);
       setMessage(null);
 
+      // Verifica que el nuevo correo no pertenezca a otra cuenta.
       const emailInUse = await db.getFirstAsync<{ id: number }>(
         'SELECT id FROM Login WHERE correo = ? AND id <> ?',
         cleanEmail,
@@ -166,6 +193,7 @@ export default function ClientsScreen() {
         return;
       }
 
+      // Ambas tablas deben conservar siempre el mismo correo.
       await db.withTransactionAsync(async () => {
         await db.runAsync(
           'UPDATE Cliente SET nombre = ?, apellido = ?, correo = ? WHERE id = ?',
@@ -177,6 +205,7 @@ export default function ClientsScreen() {
         await db.runAsync('UPDATE Login SET correo = ? WHERE id = ?', cleanEmail, client.id_login);
       });
 
+      // Si se editó la cuenta actual, también actualiza el contexto en memoria.
       if (client.id_login === user.id) {
         updateCurrentUserEmail(cleanEmail);
       }
@@ -191,6 +220,7 @@ export default function ClientsScreen() {
     }
   }
 
+  // Permite al administrador activar o inactivar una cuenta cliente.
   async function changeStatus(client: Client) {
     if (!isAdmin) {
       return;
@@ -224,10 +254,12 @@ export default function ClientsScreen() {
     }
   }
 
+  // Abre la confirmación únicamente si el cliente no tiene historial.
   function requestDelete(client: Client) {
     setMessage(null);
     cancelEditing();
 
+    // Una compra existente obliga a conservar el cliente para mantener relaciones.
     if (client.compras > 0) {
       setDeleteId(null);
       setMessage({
@@ -240,6 +272,7 @@ export default function ClientsScreen() {
     setDeleteId(client.id);
   }
 
+  // Elimina definitivamente la cuenta y su perfil si sigue siendo seguro hacerlo.
   async function deleteClient(client: Client) {
     if (!isAdmin) {
       return;
@@ -249,6 +282,7 @@ export default function ClientsScreen() {
       setProcessingId(client.id);
       setMessage(null);
 
+      // Vuelve a comprobar la existencia de compras justo antes de eliminar.
       const purchase = await db.getFirstAsync<{ id: number }>(
         'SELECT id FROM Encabezado WHERE id_cliente = ? LIMIT 1',
         client.id
@@ -264,6 +298,7 @@ export default function ClientsScreen() {
         return;
       }
 
+      // La regla CASCADE elimina Cliente al borrar su Login.
       await db.runAsync(
         "DELETE FROM Login WHERE id = ? AND rol = 'cliente'",
         client.id_login
@@ -279,6 +314,7 @@ export default function ClientsScreen() {
     }
   }
 
+  // Muestra carga mientras se obtiene la sesión.
   if (authLoading || !user) {
     return (
       <View style={styles.loadingContainer}>
@@ -287,6 +323,7 @@ export default function ClientsScreen() {
     );
   }
 
+  // Interfaz de lista, formularios de edición y confirmación de eliminación.
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -307,6 +344,7 @@ export default function ClientsScreen() {
           </View>
         ) : null}
 
+        {/* Cambia entre carga, lista vacía y tarjetas con resultados. */}
         {loading ? (
           <View style={styles.centerContent}>
             <ActivityIndicator size="large" color="#176B87" />
@@ -457,6 +495,7 @@ export default function ClientsScreen() {
   );
 }
 
+// Estilos del módulo Cliente.
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7FA' },
   container: {
@@ -503,7 +542,7 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 14,
   },
-  clientHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 },
+  clientHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 },
   clientInfo: { flex: 1, gap: 4 },
   statusLabel: { fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   activeText: { color: '#1E6B42' },

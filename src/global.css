@@ -1,3 +1,9 @@
+/*
+ * RESUMEN DEL ARCHIVO
+ * Define familias de fuentes disponibles para la versión web de la aplicación.
+ */
+
+/* :root guarda variables globales que cualquier estilo web puede reutilizar. */
 :root {
   --font-display:
     Spline Sans, Inter, ui-sans-serif, system-ui, sans-serif, Apple Color Emoji, Segoe UI Emoji,

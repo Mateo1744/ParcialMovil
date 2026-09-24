@@ -1,5 +1,14 @@
+/**
+ * RESUMEN DEL ARCHIVO
+ * Lista las cuentas pendientes para que un administrador seleccione su rol
+ * y pueda aprobarlas o rechazarlas antes del primer inicio de sesión.
+ */
+
+// Hooks para estados y recarga automática de la lista.
 import { useCallback, useEffect, useState } from 'react';
+// Navegación y evento de enfoque de Expo Router.
 import { router, useFocusEffect } from 'expo-router';
+// Acceso a la base de datos.
 import { useSQLiteContext } from 'expo-sqlite';
 import {
   ActivityIndicator,
@@ -11,8 +20,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Permite comprobar que la persona conectada sea administradora.
 import { useAuth } from '@/context/auth-context';
 
+// Datos necesarios para representar una solicitud.
 type PendingRequest = {
   id: number;
   correo: string;
@@ -24,8 +35,10 @@ type Message = {
   text: string;
 };
 
+// Roles que el administrador puede asignar.
 type UserRole = 'admin' | 'cliente';
 
+// Presenta la fecha de creación en formato colombiano.
 function formatDate(value: string) {
   const date = new Date(`${value.replace(' ', 'T')}Z`);
 
@@ -40,6 +53,7 @@ function formatDate(value: string) {
 }
 
 export default function PendingRequestsScreen() {
+  // Dependencias principales y estado visual.
   const db = useSQLiteContext();
   const { user, loading: authLoading } = useAuth();
   const [requests, setRequests] = useState<PendingRequest[]>([]);
@@ -48,6 +62,7 @@ export default function PendingRequestsScreen() {
   const [selectedRoles, setSelectedRoles] = useState<Record<number, UserRole>>({});
   const [message, setMessage] = useState<Message | null>(null);
 
+  // Consulta únicamente cuentas cliente que todavía estén pendientes.
   const loadRequests = useCallback(async () => {
     try {
       setLoading(true);
@@ -58,6 +73,7 @@ export default function PendingRequestsScreen() {
         ORDER BY fecha_creacion ASC, id ASC
       `);
       setRequests(rows);
+      // Asigna Cliente como opción inicial sin borrar selecciones existentes.
       setSelectedRoles((current) => {
         const next = { ...current };
         rows.forEach((request) => {
@@ -72,12 +88,14 @@ export default function PendingRequestsScreen() {
     }
   }, [db]);
 
+  // Bloquea la pantalla para usuarios que no sean administradores.
   useEffect(() => {
     if (!authLoading && (!user || user.rol !== 'admin')) {
       router.replace('/home');
     }
   }, [authLoading, user]);
 
+  // Actualiza las solicitudes cada vez que se vuelve al módulo.
   useFocusEffect(
     useCallback(() => {
       if (user?.rol === 'admin') {
@@ -86,11 +104,13 @@ export default function PendingRequestsScreen() {
     }, [loadRequests, user?.rol])
   );
 
+  // Aprueba con el rol seleccionado o rechaza dejando la cuenta inactiva.
   async function changeStatus(request: PendingRequest, status: 'activo' | 'inactivo') {
     try {
       setProcessingId(request.id);
       setMessage(null);
 
+      // Si no hubo selección explícita, el rol seguro por defecto es cliente.
       const selectedRole = selectedRoles[request.id] ?? 'cliente';
       const roleToSave = status === 'activo' ? selectedRole : 'cliente';
       const result = await db.runAsync(
@@ -102,6 +122,7 @@ export default function PendingRequestsScreen() {
         request.id
       );
 
+      // Cero cambios significa que la solicitud ya fue procesada.
       if (result.changes === 0) {
         setMessage({
           type: 'error',
@@ -125,6 +146,7 @@ export default function PendingRequestsScreen() {
     }
   }
 
+  // Mientras se verifica el rol, no se muestra información sensible.
   if (authLoading || !user || user.rol !== 'admin') {
     return (
       <View style={styles.loadingContainer}>
@@ -133,6 +155,7 @@ export default function PendingRequestsScreen() {
     );
   }
 
+  // Interfaz de solicitudes, selector de rol y botones de decisión.
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -241,6 +264,7 @@ export default function PendingRequestsScreen() {
   );
 }
 
+// Estilos del módulo de aprobación.
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7FA' },
   container: {

@@ -1,5 +1,14 @@
+/**
+ * RESUMEN DEL ARCHIVO
+ * Implementa el inventario de productos. Todos pueden consultar, pero solo el
+ * administrador puede crear, editar o eliminar productos.
+ */
+
+// Hooks usados para estados, consultas y recarga al volver a la pantalla.
 import { useCallback, useEffect, useState } from 'react';
+// Navegación y enfoque de la ruta.
 import { router, useFocusEffect } from 'expo-router';
+// Conexión SQLite compartida.
 import { useSQLiteContext } from 'expo-sqlite';
 import {
   ActivityIndicator,
@@ -12,8 +21,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Datos de sesión para aplicar permisos por rol.
 import { useAuth } from '@/context/auth-context';
 
+// Estructura completa de un producto leído de SQLite.
 type Product = {
   id: number;
   nombre: string;
@@ -28,6 +39,7 @@ type Message = {
   text: string;
 };
 
+// Todos los TextInput trabajan con texto, incluso precio y stock.
 type ProductForm = {
   nombre: string;
   descripcion: string;
@@ -35,6 +47,7 @@ type ProductForm = {
   stock: string;
 };
 
+// Valores usados al abrir o limpiar un formulario.
 const EMPTY_FORM: ProductForm = {
   nombre: '',
   descripcion: '',
@@ -42,6 +55,7 @@ const EMPTY_FORM: ProductForm = {
   stock: '',
 };
 
+// Presenta los valores en pesos colombianos.
 function formatMoney(value: number) {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -50,6 +64,7 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
+// Limpia y convierte los campos del formulario a tipos válidos para SQLite.
 function parseProductForm(form: ProductForm) {
   const nombre = form.nombre.trim();
   const descripcion = form.descripcion.trim();
@@ -72,8 +87,10 @@ function parseProductForm(form: ProductForm) {
 }
 
 export default function ProductsScreen() {
+  // Base de datos y sesión actual.
   const db = useSQLiteContext();
   const { user, loading: authLoading } = useAuth();
+  // Lista, carga, formularios y confirmación de eliminación.
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
@@ -85,8 +102,10 @@ export default function ProductsScreen() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
 
+  // Solo este rol verá controles de escritura.
   const isAdmin = user?.rol === 'admin';
 
+  // Consulta productos y cuenta cuántos detalles de compra usan cada uno.
   const loadProducts = useCallback(async () => {
     try {
       setLoading(true);
@@ -111,12 +130,14 @@ export default function ProductsScreen() {
     }
   }, [db]);
 
+  // Protege la pantalla cuando no hay sesión.
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace('/login');
     }
   }, [authLoading, user]);
 
+  // Recarga los productos al regresar desde otro módulo.
   useFocusEffect(
     useCallback(() => {
       if (user) {
@@ -125,19 +146,23 @@ export default function ProductsScreen() {
     }, [loadProducts, user])
   );
 
+  // Actualiza un campo específico del formulario de creación.
   function changeCreateField(field: keyof ProductForm, value: string) {
     setCreateForm((current) => ({ ...current, [field]: value }));
   }
 
+  // Actualiza un campo específico del formulario de edición.
   function changeEditField(field: keyof ProductForm, value: string) {
     setEditForm((current) => ({ ...current, [field]: value }));
   }
 
+  // Cierra y reinicia el formulario de creación.
   function closeCreateForm() {
     setShowCreateForm(false);
     setCreateForm(EMPTY_FORM);
   }
 
+  // Valida e inserta un producto nuevo.
   async function createProduct() {
     if (!isAdmin) {
       return;
@@ -171,6 +196,7 @@ export default function ProductsScreen() {
     }
   }
 
+  // Copia los valores seleccionados al formulario de edición.
   function startEditing(product: Product) {
     setEditingId(product.id);
     setEditForm({
@@ -183,11 +209,13 @@ export default function ProductsScreen() {
     setMessage(null);
   }
 
+  // Sale del modo edición y limpia los campos.
   function cancelEditing() {
     setEditingId(null);
     setEditForm(EMPTY_FORM);
   }
 
+  // Valida y guarda los cambios de un producto existente.
   async function updateProduct(product: Product) {
     if (!isAdmin) {
       return;
@@ -223,10 +251,12 @@ export default function ProductsScreen() {
     }
   }
 
+  // Comprueba si se puede mostrar la confirmación de eliminación.
   function requestDelete(product: Product) {
     cancelEditing();
     setMessage(null);
 
+    // Un producto vendido debe conservarse para no romper el historial.
     if (product.ventas > 0) {
       setDeleteId(null);
       setMessage({
@@ -239,6 +269,7 @@ export default function ProductsScreen() {
     setDeleteId(product.id);
   }
 
+  // Elimina el producto después de repetir la validación en la base.
   async function deleteProduct(product: Product) {
     if (!isAdmin) {
       return;
@@ -248,6 +279,7 @@ export default function ProductsScreen() {
       setProcessingId(product.id);
       setMessage(null);
 
+      // Revisa de nuevo por si se registró una compra recientemente.
       const sale = await db.getFirstAsync<{ id: number }>(
         'SELECT id FROM Detalles WHERE id_producto = ? LIMIT 1',
         product.id
@@ -274,6 +306,7 @@ export default function ProductsScreen() {
     }
   }
 
+  // Evita mostrar el inventario antes de recuperar la sesión.
   if (authLoading || !user) {
     return (
       <View style={styles.loadingContainer}>
@@ -431,6 +464,7 @@ export default function ProductsScreen() {
   );
 }
 
+// Propiedades del formulario reutilizado para crear y editar.
 type ProductFormCardProps = {
   title: string;
   form: ProductForm;
@@ -442,6 +476,7 @@ type ProductFormCardProps = {
   embedded?: boolean;
 };
 
+// Componente visual reutilizable para no duplicar todos los campos.
 function ProductFormCard({
   title,
   form,
@@ -516,6 +551,7 @@ function ProductFormCard({
   );
 }
 
+// Estilos del inventario y de sus formularios.
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7FA' },
   container: {
@@ -534,6 +570,7 @@ const styles = StyleSheet.create({
   },
   introCard: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 18,
@@ -599,7 +636,7 @@ const styles = StyleSheet.create({
     padding: 20,
     gap: 14,
   },
-  productHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  productHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
   productInfo: { flex: 1 },
   productName: { color: '#14324A', fontSize: 20, fontWeight: '900' },
   description: { color: '#5F7181', fontSize: 15, lineHeight: 21, marginTop: 5 },

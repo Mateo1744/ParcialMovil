@@ -1,36 +1,53 @@
+/**
+ * RESUMEN DEL ARCHIVO
+ * Es el menú principal. Comprueba que la sesión sea válida, obliga al cliente
+ * nuevo a completar su perfil y muestra módulos diferentes según el rol.
+ */
+
+// Hooks para comprobar acceso y controlar el cierre de sesión.
 import { useEffect, useState } from 'react';
+// Permite abrir los diferentes módulos de la aplicación.
 import { router } from 'expo-router';
+// Conexión compartida para verificar el perfil del cliente.
 import { useSQLiteContext } from 'expo-sqlite';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Proporciona usuario, carga y cierre de sesión.
 import { useAuth } from '@/context/auth-context';
 
 export default function HomeScreen() {
+  // Dependencias principales de la pantalla.
   const db = useSQLiteContext();
   const { user, loading, signOut } = useAuth();
+  // Estados usados para mostrar indicadores de carga.
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [checkingProfile, setCheckingProfile] = useState(true);
 
+  // Verifica la sesión y el perfil cada vez que cambia el usuario.
   useEffect(() => {
     let isActive = true;
 
+    // Controla que nadie vea el inicio sin una sesión válida.
     async function checkAccess() {
       if (loading) {
         return;
       }
 
+      // Una sesión vacía se redirige al login.
       if (!user) {
         router.replace('/login');
         return;
       }
 
+      // Un cliente debe tener datos personales antes de usar los módulos.
       if (user.rol === 'cliente') {
         const profile = await db.getFirstAsync<{ id: number }>(
           'SELECT id FROM Cliente WHERE id_login = ?',
           user.id
         );
 
+        // Si no existe Cliente, abre el formulario obligatorio.
         if (!profile) {
           router.replace('/perfil');
           return;
@@ -53,6 +70,7 @@ export default function HomeScreen() {
     };
   }, [db, loading, user]);
 
+  // Elimina la sesión local y vuelve al login.
   async function handleSignOut() {
     try {
       setIsSigningOut(true);
@@ -63,6 +81,7 @@ export default function HomeScreen() {
     }
   }
 
+  // Evita mostrar el menú antes de terminar las comprobaciones.
   if (loading || checkingProfile || !user) {
     return (
       <View style={styles.loadingContainer}>
@@ -71,11 +90,14 @@ export default function HomeScreen() {
     );
   }
 
+  // Esta variable simplifica las condiciones visuales por rol.
   const isAdmin = user.rol === 'admin';
 
+  // Interfaz principal de la aplicación.
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
+        {/* Encabezado con correo de la sesión y cierre de sesión. */}
         <View style={styles.header}>
           <View style={styles.headerText}>
             <Text style={styles.greeting}>Hola</Text>
@@ -94,16 +116,18 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
+        {/* Tarjeta que identifica claramente el rol conectado. */}
         <View style={styles.roleCard}>
           <Text style={styles.roleLabel}>ROL ACTUAL</Text>
           <Text style={styles.roleTitle}>{isAdmin ? 'Administrador' : 'Cliente'}</Text>
           <Text style={styles.roleDescription}>
             {isAdmin
-              ? 'Tendrás acceso a usuarios, clientes, productos y compras.'
-              : 'Podrás completar tu perfil, consultar productos y realizar compras.'}
+              ? 'Administra solicitudes, clientes, productos y compras.'
+              : 'Consulta tu perfil, revisa productos y realiza tus compras.'}
           </Text>
         </View>
 
+        {/* El administrador ve módulos CRUD; el cliente ve solo sus opciones. */}
         {isAdmin ? (
           <View style={styles.adminSection}>
             <Text style={styles.sectionTitle}>Administración</Text>
@@ -148,9 +172,9 @@ export default function HomeScreen() {
                 style={({ pressed }) => [styles.requestButton, pressed && styles.buttonPressed]}
                 onPress={() => router.push('/encabezados')}>
                 <View style={styles.requestButtonText}>
-                  <Text style={styles.requestButtonTitle}>Encabezados y detalles</Text>
+                  <Text style={styles.requestButtonTitle}>Compras</Text>
                   <Text style={styles.requestButtonDescription}>
-                    Consulta y administra las compras realizadas.
+                    Consulta y administra encabezados y detalles.
                   </Text>
                 </View>
                 <Text style={styles.requestButtonArrow}>›</Text>
@@ -204,38 +228,12 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>Funciones implementadas</Text>
-
-        <View style={styles.cardGrid}>
-          <View style={styles.moduleCard}>
-            <Text style={styles.moduleNumber}>01</Text>
-            <Text style={styles.moduleTitle}>Inicio de sesión</Text>
-            <Text style={styles.moduleText}>Acceso validado por correo, contraseña y estado.</Text>
-          </View>
-
-          <View style={styles.moduleCard}>
-            <Text style={styles.moduleNumber}>02</Text>
-            <Text style={styles.moduleTitle}>Sesión persistente</Text>
-            <Text style={styles.moduleText}>La sesión permanece activa al volver a abrir la app.</Text>
-          </View>
-
-          <View style={styles.moduleCard}>
-            <Text style={styles.moduleNumber}>03</Text>
-            <Text style={styles.moduleTitle}>Acceso por rol</Text>
-            <Text style={styles.moduleText}>
-              La pantalla identifica si ingresó un administrador o un cliente.
-            </Text>
-          </View>
-        </View>
-
-        <Text style={styles.nextStep}>
-          Usa las opciones superiores para entrar a los módulos disponibles según tu rol.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// Estilos del menú principal y sus tarjetas de navegación.
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7FA' },
   container: { flexGrow: 1, paddingHorizontal: 24, paddingVertical: 24 },
@@ -247,6 +245,7 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 16,
@@ -303,27 +302,5 @@ const styles = StyleSheet.create({
   requestButtonDescription: { color: '#5F7181', fontSize: 15, marginTop: 5 },
   requestButtonArrow: { color: '#176B87', fontSize: 34, lineHeight: 34, fontWeight: '500' },
   clientProductButton: { marginTop: 12 },
-  cardGrid: { width: '100%', maxWidth: 760, alignSelf: 'center', gap: 14 },
-  moduleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E2E9EE',
-  },
-  moduleNumber: { color: '#176B87', fontSize: 13, fontWeight: '900' },
-  moduleTitle: { color: '#14324A', fontSize: 18, fontWeight: '800', marginTop: 8 },
-  moduleText: { color: '#5F7181', fontSize: 15, lineHeight: 21, marginTop: 6 },
-  nextStep: {
-    width: '100%',
-    maxWidth: 760,
-    alignSelf: 'center',
-    color: '#5F7181',
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-    marginTop: 24,
-    marginBottom: 12,
-  },
   buttonPressed: { opacity: 0.75 },
 });

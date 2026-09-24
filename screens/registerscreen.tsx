@@ -1,4 +1,12 @@
+/**
+ * RESUMEN DEL ARCHIVO
+ * Permite crear una cuenta nueva. Valida correo y contraseña, y guarda la
+ * solicitud en estado pendiente hasta que un administrador la apruebe.
+ */
+
+// useState administra los valores escritos y el estado de carga.
 import { useState } from 'react';
+// router permite volver al login al completar el registro.
 import { router } from 'expo-router';
 import {
   ActivityIndicator,
@@ -14,32 +22,41 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// register contiene la operación real de registro en SQLite.
 import { useAuth } from '@/context/auth-context';
 
+// Expresión sencilla para comprobar la estructura básica de un correo.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function RegisterScreen() {
+  // Obtiene la función compartida de registro.
   const { register } = useAuth();
+  // Estados de los tres campos, mensajes y carga.
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Valida y envía la solicitud cuando se presiona el botón.
   async function handleRegister() {
     setMessage('');
+    // Quita espacios y guarda el correo siempre en minúsculas.
     const normalizedEmail = email.trim().toLowerCase();
 
+    // Primera validación: formato del correo.
     if (!EMAIL_PATTERN.test(normalizedEmail)) {
       setMessage('Ingresa un correo electrónico válido.');
       return;
     }
 
+    // Segunda validación: longitud mínima definida para la contraseña.
     if (password.length < 6) {
       setMessage('La contraseña debe tener mínimo 6 caracteres.');
       return;
     }
 
+    // Tercera validación: ambas contraseñas deben ser iguales.
     if (password !== confirmPassword) {
       setMessage('Las contraseñas no coinciden.');
       return;
@@ -47,6 +64,7 @@ export default function RegisterScreen() {
 
     try {
       setIsLoading(true);
+      // Solicita al contexto crear la cuenta pendiente.
       const result = await register(normalizedEmail, password);
 
       if (!result.ok) {
@@ -54,6 +72,7 @@ export default function RegisterScreen() {
         return;
       }
 
+      // Confirma el registro y regresa a la pantalla de ingreso.
       Alert.alert('Cuenta registrada', result.message, [
         { text: 'Entendido', onPress: () => router.replace('/login') },
       ]);
@@ -64,6 +83,7 @@ export default function RegisterScreen() {
     }
   }
 
+  // Interfaz visual del registro.
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <KeyboardAvoidingView
@@ -79,6 +99,7 @@ export default function RegisterScreen() {
             </Text>
           </View>
 
+          {/* Formulario con correo, contraseña y confirmación. */}
           <View style={styles.form}>
             <Text style={styles.label}>Correo electrónico</Text>
             <TextInput
@@ -139,6 +160,7 @@ export default function RegisterScreen() {
   );
 }
 
+// Estilos de presentación del formulario.
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: '#F4F7FA' },
@@ -153,10 +175,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 22,
-    shadowColor: '#102A3C',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
+    boxShadow: '0 8px 16px rgba(16, 42, 60, 0.08)',
     elevation: 3,
   },
   label: {
@@ -196,4 +215,3 @@ const styles = StyleSheet.create({
   buttonPressed: { opacity: 0.82 },
   buttonDisabled: { opacity: 0.65 },
 });
-

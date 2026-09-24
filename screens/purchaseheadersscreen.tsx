@@ -1,5 +1,14 @@
+/**
+ * RESUMEN DEL ARCHIVO
+ * Muestra el historial de encabezados de compra. El cliente ve solo los suyos;
+ * el administrador ve todos y puede eliminarlos restaurando el stock.
+ */
+
+// Hooks para estado, consultas y recarga al volver a la pantalla.
 import { useCallback, useEffect, useState } from 'react';
+// Navegación y evento de enfoque.
 import { router, useFocusEffect } from 'expo-router';
+// Conexión SQLite compartida.
 import { useSQLiteContext } from 'expo-sqlite';
 import {
   ActivityIndicator,
@@ -11,9 +20,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Sesión actual y operación segura para eliminar compras.
 import { useAuth } from '@/context/auth-context';
 import { deletePurchase } from '@/database/purchases';
 
+// Resultado de la consulta del encabezado unido con Cliente y Detalles.
 type PurchaseHeader = {
   id: number;
   fecha: string;
@@ -29,6 +40,7 @@ type Message = {
   text: string;
 };
 
+// Presenta el total en pesos colombianos.
 function formatMoney(value: number) {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -37,6 +49,7 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
+// Presenta fecha y hora de SQLite en formato local.
 function formatDate(value: string) {
   const date = new Date(`${value.replace(' ', 'T')}Z`);
 
@@ -48,6 +61,7 @@ function formatDate(value: string) {
 }
 
 export default function PurchaseHeadersScreen() {
+  // Dependencias y estados de datos, carga y eliminación.
   const db = useSQLiteContext();
   const { user, loading: authLoading } = useAuth();
   const [purchases, setPurchases] = useState<PurchaseHeader[]>([]);
@@ -56,8 +70,10 @@ export default function PurchaseHeadersScreen() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
 
+  // Determina alcance de la consulta y botones disponibles.
   const isAdmin = user?.rol === 'admin';
 
+  // Admin consulta todo; cliente filtra por su id de Login.
   const loadPurchases = useCallback(async () => {
     if (!user) {
       return;
@@ -65,6 +81,7 @@ export default function PurchaseHeadersScreen() {
 
     try {
       setLoading(true);
+      // La suma de cantidades permite mostrar las unidades de cada compra.
       const baseSql = `
         SELECT
           e.id,
@@ -82,6 +99,7 @@ export default function PurchaseHeadersScreen() {
         ORDER BY e.fecha DESC, e.id DESC
       `;
 
+      // Solo se envía user.id cuando la cláusula WHERE está presente.
       const rows = isAdmin
         ? await db.getAllAsync<PurchaseHeader>(baseSql)
         : await db.getAllAsync<PurchaseHeader>(baseSql, user.id);
@@ -93,12 +111,14 @@ export default function PurchaseHeadersScreen() {
     }
   }, [db, isAdmin, user]);
 
+  // Protege la ruta si la sesión se perdió.
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace('/login');
     }
   }, [authLoading, user]);
 
+  // Actualiza el historial al volver de Detalles o Nueva compra.
   useFocusEffect(
     useCallback(() => {
       if (user) {
@@ -107,6 +127,7 @@ export default function PurchaseHeadersScreen() {
     }, [loadPurchases, user])
   );
 
+  // Solo el admin puede eliminar; la función devuelve existencias al inventario.
   async function handleDelete(purchase: PurchaseHeader) {
     if (!isAdmin) {
       return;
@@ -132,6 +153,7 @@ export default function PurchaseHeadersScreen() {
     }
   }
 
+  // Muestra carga mientras se recupera la sesión.
   if (authLoading || !user) {
     return (
       <View style={styles.loadingContainer}>
@@ -140,6 +162,7 @@ export default function PurchaseHeadersScreen() {
     );
   }
 
+  // Interfaz de historial y confirmación de eliminación.
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container}>
@@ -263,11 +286,12 @@ export default function PurchaseHeadersScreen() {
   );
 }
 
+// Estilos del módulo Encabezado.
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7FA' },
   container: { flexGrow: 1, width: '100%', maxWidth: 900, alignSelf: 'center', padding: 24 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F7FA' },
-  introCard: { flexDirection: 'row', alignItems: 'center', gap: 18, backgroundColor: '#176B87', borderRadius: 20, padding: 24, marginBottom: 20 },
+  introCard: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 18, backgroundColor: '#176B87', borderRadius: 20, padding: 24, marginBottom: 20 },
   introTextContainer: { flex: 1 },
   introTitle: { color: '#FFFFFF', fontSize: 25, fontWeight: '900' },
   introText: { color: '#E7F5F8', fontSize: 16, lineHeight: 23, marginTop: 8 },
@@ -286,7 +310,7 @@ const styles = StyleSheet.create({
   list: { gap: 14 },
   countText: { color: '#5F7181', fontSize: 15, fontWeight: '700', marginBottom: 2 },
   purchaseCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E9EE', borderRadius: 17, padding: 20, gap: 15 },
-  purchaseHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 },
+  purchaseHeader: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 },
   purchaseInfo: { flex: 1, gap: 4 },
   purchaseNumber: { color: '#176B87', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   clientName: { color: '#14324A', fontSize: 19, fontWeight: '900' },

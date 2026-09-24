@@ -1,5 +1,14 @@
+/**
+ * RESUMEN DEL ARCHIVO
+ * Solicita nombre y apellido la primera vez que ingresa un cliente aprobado.
+ * Con esos datos crea el registro Cliente asociado a su cuenta Login.
+ */
+
+// Hooks para ejecutar la comprobación inicial y manejar el formulario.
 import { useEffect, useState } from 'react';
+// Navegación entre perfil e inicio.
 import { router } from 'expo-router';
+// Acceso a la base de datos compartida.
 import { useSQLiteContext } from 'expo-sqlite';
 import {
   ActivityIndicator,
@@ -14,30 +23,38 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Consulta el usuario que tiene la sesión activa.
 import { useAuth } from '@/context/auth-context';
 
 export default function ClientProfileScreen() {
+  // Conexión SQLite y datos de autenticación.
   const db = useSQLiteContext();
   const { user, loading: authLoading } = useAuth();
+  // Estados del formulario y sus indicadores.
   const [name, setName] = useState('');
   const [lastName, setLastName] = useState('');
   const [checkingProfile, setCheckingProfile] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Comprueba que la pantalla solo se use para un cliente sin perfil.
   useEffect(() => {
+    // Evita cambiar el estado si el componente ya se cerró.
     let isActive = true;
 
+    // Revisa sesión, rol y existencia del registro Cliente.
     async function checkProfile() {
       if (authLoading) {
         return;
       }
 
+      // Administradores o sesiones inválidas vuelven al inicio.
       if (!user || user.rol !== 'cliente') {
         router.replace('/home');
         return;
       }
 
+      // Busca un perfil vinculado al id de Login.
       const existingProfile = await db.getFirstAsync<{ id: number }>(
         'SELECT id FROM Cliente WHERE id_login = ?',
         user.id
@@ -47,6 +64,7 @@ export default function ClientProfileScreen() {
         return;
       }
 
+      // Si ya existe, no es necesario volver a mostrar el formulario.
       if (existingProfile) {
         router.replace('/home');
         return;
@@ -62,16 +80,20 @@ export default function ClientProfileScreen() {
       }
     });
 
+    // Limpieza del efecto cuando se abandona la pantalla.
     return () => {
       isActive = false;
     };
   }, [authLoading, db, user]);
 
+  // Valida y guarda los datos personales.
   async function handleSave() {
+    // trim elimina espacios al principio y al final.
     const cleanName = name.trim();
     const cleanLastName = lastName.trim();
     setError('');
 
+    // Nombre y apellido deben tener contenido válido.
     if (cleanName.length < 2 || cleanLastName.length < 2) {
       setError('Escribe un nombre y un apellido válidos.');
       return;
@@ -85,11 +107,13 @@ export default function ClientProfileScreen() {
     try {
       setSaving(true);
 
+      // Repite la consulta para evitar duplicados si el botón se presiona dos veces.
       const existingProfile = await db.getFirstAsync<{ id: number }>(
         'SELECT id FROM Cliente WHERE id_login = ?',
         user.id
       );
 
+      // Inserta el perfil y utiliza el mismo correo de la cuenta.
       if (!existingProfile) {
         await db.runAsync(
           `INSERT INTO Cliente (id_login, nombre, apellido, correo)
@@ -101,6 +125,7 @@ export default function ClientProfileScreen() {
         );
       }
 
+      // Continúa al menú principal después de guardar.
       router.replace('/home');
     } catch {
       setError('No fue posible guardar el perfil. Verifica los datos e inténtalo de nuevo.');
@@ -109,6 +134,7 @@ export default function ClientProfileScreen() {
     }
   }
 
+  // Muestra carga mientras se valida el acceso a esta pantalla.
   if (authLoading || checkingProfile || !user || user.rol !== 'cliente') {
     return (
       <View style={styles.loadingContainer}>
@@ -117,6 +143,7 @@ export default function ClientProfileScreen() {
     );
   }
 
+  // Interfaz que solicita los dos datos faltantes.
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <KeyboardAvoidingView
@@ -183,6 +210,7 @@ export default function ClientProfileScreen() {
   );
 }
 
+// Estilos visuales de la pantalla de perfil.
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   safeArea: { flex: 1, backgroundColor: '#F4F7FA' },

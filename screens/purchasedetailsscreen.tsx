@@ -1,5 +1,14 @@
+/**
+ * RESUMEN DEL ARCHIVO
+ * Muestra los productos de una compra específica. El cliente solo consulta;
+ * el administrador puede cambiar cantidades, agregar o quitar detalles.
+ */
+
+// Hooks para estados, consultas y funciones reutilizables.
 import { useCallback, useEffect, useState } from 'react';
+// Navegación, recarga por enfoque y lectura del id enviado en la URL.
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+// Conexión SQLite compartida.
 import { useSQLiteContext } from 'expo-sqlite';
 import {
   ActivityIndicator,
@@ -12,6 +21,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// Sesión y operaciones transaccionales que mantienen el stock correcto.
 import { useAuth } from '@/context/auth-context';
 import {
   addPurchaseDetail,
@@ -19,6 +29,7 @@ import {
   updateDetailQuantity,
 } from '@/database/purchases';
 
+// Información general de la compra y de su propietario.
 type PurchaseHeader = {
   id: number;
   fecha: string;
@@ -29,6 +40,7 @@ type PurchaseHeader = {
   id_login: number;
 };
 
+// Producto ya incluido en la compra.
 type PurchaseDetail = {
   id: number;
   id_producto: number;
@@ -38,6 +50,7 @@ type PurchaseDetail = {
   stock: number;
 };
 
+// Producto que el administrador todavía puede agregar.
 type AvailableProduct = {
   id: number;
   nombre: string;
@@ -50,6 +63,7 @@ type Message = {
   text: string;
 };
 
+// Presenta subtotales y total en pesos colombianos.
 function formatMoney(value: number) {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -58,6 +72,7 @@ function formatMoney(value: number) {
   }).format(value);
 }
 
+// Convierte la fecha guardada por SQLite a fecha y hora local.
 function formatDate(value: string) {
   const date = new Date(`${value.replace(' ', 'T')}Z`);
   return Number.isNaN(date.getTime())
@@ -66,11 +81,15 @@ function formatDate(value: string) {
 }
 
 export default function PurchaseDetailsScreen() {
+  // Lee la conexión y el parámetro id de la ruta /detalles.
   const db = useSQLiteContext();
   const params = useLocalSearchParams<{ id?: string | string[] }>();
+  // Expo Router puede entregar uno o varios valores; aquí se toma solo el primero.
   const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
+  // Convierte el texto de la URL en número para usarlo en SQL.
   const purchaseId = Number(rawId);
   const { user, loading: authLoading } = useAuth();
+  // Estados del encabezado, detalles, formularios y mensajes.
   const [header, setHeader] = useState<PurchaseHeader | null>(null);
   const [details, setDetails] = useState<PurchaseDetail[]>([]);
   const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
@@ -84,9 +103,12 @@ export default function PurchaseDetailsScreen() {
   const [newQuantity, setNewQuantity] = useState('1');
   const [message, setMessage] = useState<Message | null>(null);
 
+  // Simplifica permisos y elementos visibles.
   const isAdmin = user?.rol === 'admin';
 
+  // Carga encabezado, detalles y productos disponibles para agregar.
   const loadDetails = useCallback(async () => {
+    // Rechaza ids vacíos, decimales, negativos o iguales a cero.
     if (!user || !Number.isInteger(purchaseId) || purchaseId <= 0) {
       if (user) {
         setMessage({ type: 'error', text: 'El número de compra no es válido.' });
@@ -97,6 +119,7 @@ export default function PurchaseDetailsScreen() {
 
     try {
       setLoading(true);
+      // Une Encabezado y Cliente para conocer el dueño de la compra.
       const purchase = await db.getFirstAsync<PurchaseHeader>(
         `SELECT e.id, e.fecha, e.total, c.nombre, c.apellido, c.correo, c.id_login
          FROM Encabezado e
@@ -105,17 +128,20 @@ export default function PurchaseDetailsScreen() {
         purchaseId
       );
 
+      // Informa si alguien intenta abrir una compra inexistente.
       if (!purchase) {
         setHeader(null);
         setMessage({ type: 'error', text: 'La compra no existe.' });
         return;
       }
 
+      // Un cliente nunca puede consultar compras de otra cuenta.
       if (!isAdmin && purchase.id_login !== user.id) {
         router.replace('/encabezados');
         return;
       }
 
+      // Consulta los detalles con nombre y stock actual del producto.
       const rows = await db.getAllAsync<PurchaseDetail>(
         `SELECT d.id, d.id_producto, p.nombre, d.cantidad, d.valor, p.stock
          FROM Detalles d
@@ -125,6 +151,7 @@ export default function PurchaseDetailsScreen() {
         purchaseId
       );
 
+      // Solo el administrador necesita la lista para agregar nuevos detalles.
       const products = isAdmin
         ? await db.getAllAsync<AvailableProduct>(
             `SELECT p.id, p.nombre, p.valor_unitario, p.stock
@@ -149,12 +176,14 @@ export default function PurchaseDetailsScreen() {
     }
   }, [db, isAdmin, purchaseId, user]);
 
+  // Protege la ruta cuando no hay sesión.
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace('/login');
     }
   }, [authLoading, user]);
 
+  // Recarga los datos al regresar a la pantalla.
   useFocusEffect(
     useCallback(() => {
       if (user) {
@@ -163,6 +192,7 @@ export default function PurchaseDetailsScreen() {
     }, [loadDetails, user])
   );
 
+  // Prepara el formulario con la cantidad actual del detalle.
   function startEditing(detail: PurchaseDetail) {
     setEditingId(detail.id);
     setEditQuantity(String(detail.cantidad));
@@ -171,6 +201,7 @@ export default function PurchaseDetailsScreen() {
     setMessage(null);
   }
 
+  // Actualiza cantidad, stock, subtotal y total mediante una transacción.
   async function saveQuantity(detail: PurchaseDetail) {
     if (!isAdmin) {
       return;
@@ -193,6 +224,7 @@ export default function PurchaseDetailsScreen() {
     }
   }
 
+  // Agrega a la compra un producto que aún no estaba incluido.
   async function addDetail() {
     if (!isAdmin || !selectedProductId) {
       setMessage({ type: 'error', text: 'Selecciona un producto.' });
@@ -218,6 +250,7 @@ export default function PurchaseDetailsScreen() {
     }
   }
 
+  // Elimina un detalle y devuelve sus unidades al inventario.
   async function removeDetail(detail: PurchaseDetail) {
     if (!isAdmin) {
       return;
@@ -243,6 +276,7 @@ export default function PurchaseDetailsScreen() {
     }
   }
 
+  // No muestra información hasta recuperar la sesión.
   if (authLoading || !user) {
     return (
       <View style={styles.loadingContainer}>
@@ -251,6 +285,7 @@ export default function PurchaseDetailsScreen() {
     );
   }
 
+  // Interfaz del encabezado, lista de detalles y controles administrativos.
   return (
     <SafeAreaView style={styles.safeArea} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
@@ -461,13 +496,14 @@ export default function PurchaseDetailsScreen() {
   );
 }
 
+// Estilos del módulo Detalle.
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F4F7FA' },
   container: { flexGrow: 1, width: '100%', maxWidth: 900, alignSelf: 'center', padding: 24 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F7FA' },
   loadingContent: { alignItems: 'center', justifyContent: 'center', paddingVertical: 80 },
   loadingText: { color: '#5F7181', fontSize: 15, marginTop: 12 },
-  headerCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, backgroundColor: '#176B87', borderRadius: 20, padding: 24, marginBottom: 18 },
+  headerCard: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 18, backgroundColor: '#176B87', borderRadius: 20, padding: 24, marginBottom: 18 },
   headerInfo: { flex: 1, gap: 4 },
   headerLabel: { color: '#B8E3EF', fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   clientName: { color: '#FFFFFF', fontSize: 23, fontWeight: '900' },
@@ -481,7 +517,7 @@ const styles = StyleSheet.create({
   error: { backgroundColor: '#FDECEC' },
   successText: { color: '#1E6B42', fontSize: 15, fontWeight: '700' },
   errorText: { color: '#B42318', fontSize: 15, fontWeight: '700' },
-  adminBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 15 },
+  adminBar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginBottom: 15 },
   adminText: { flex: 1, color: '#5F7181', fontSize: 14 },
   addButton: { backgroundColor: '#176B87', borderRadius: 10, paddingHorizontal: 15, paddingVertical: 12 },
   addButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
@@ -498,7 +534,7 @@ const styles = StyleSheet.create({
   quantityInput: { width: 130, minHeight: 47, borderWidth: 1, borderColor: '#AAC1CE', borderRadius: 10, paddingHorizontal: 13, color: '#14324A', backgroundColor: '#FAFCFD', fontSize: 16, marginBottom: 10 },
   list: { gap: 12 },
   detailCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E9EE', borderRadius: 16, padding: 19, gap: 14 },
-  detailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 15 },
+  detailHeader: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 15 },
   detailInfo: { flex: 1 },
   productName: { color: '#14324A', fontSize: 19, fontWeight: '900' },
   unitPrice: { color: '#5F7181', fontSize: 14, marginTop: 5 },
